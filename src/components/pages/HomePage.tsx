@@ -296,7 +296,7 @@ const HomePage: React.FC = () => {
                   <img
                     src={partner.logo}
                     alt={partner.name}
-                    className="h-12 object-contain opacity-70 hover:opacity-100 transition-opacity"
+                    className="h-28 object-contain opacity-70 hover:opacity-100 transition-opacity"
                   />
                 </div>
               ))}
@@ -306,7 +306,7 @@ const HomePage: React.FC = () => {
                   <img
                     src={partner.logo}
                     alt={partner.name}
-                    className="h-12 object-contain opacity-70 hover:opacity-100 transition-opacity"
+                    className="h-24 object-contain opacity-70 hover:opacity-100 transition-opacity"
                   />
                 </div>
               ))}
@@ -336,19 +336,7 @@ const HomePage: React.FC = () => {
         </div>
       </section>
 
-      <style jsx>{`
-        @keyframes scroll {
-          0% {
-            transform: translateX(0);
-          }
-          100% {
-            transform: translateX(-50%);
-          }
-        }
-        .animate-scroll {
-          animation: scroll 30s linear infinite;
-        }
-      `}</style>
+
       
       {showAuthModal && (
         <AuthModal onClose={() => setShowAuthModal(false)} />

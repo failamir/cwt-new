@@ -1,18 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Eye, Search, Filter } from 'lucide-react';
+import { JobService } from '../../services/jobService';
+import type { Job as DbJob } from '../../lib/types';
 
 interface Job {
   id: string;
   title: string;
-  slug: string;
-  content: string;
-  department: string;
-  principal: string;
-  expirationDate: string;
-  gender: string;
-  isUrgent: boolean;
-  status: string;
-  createdDate: string;
+  // Local-only fields for UI; mapped to DB fields
+  slug?: string;
+  content?: string; // maps to description
+  department: string; // Deck | Engine | Hotel (UI) -> deck | engine | hotel (DB)
+  principal: string; // maps to company
+  expirationDate: string; // maps to expiration_date
+  gender: string; // Male | Female | Any -> male | female | any
+  isUrgent: boolean; // maps to urgent
+  status?: string; // Not stored in DB
+  createdDate: string; // maps to date_posted
 }
 
 interface JobFormData {
@@ -31,6 +34,9 @@ const JobManagement: React.FC = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('all');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<JobFormData>({
     title: '',
     slug: '',
@@ -43,63 +49,59 @@ const JobManagement: React.FC = () => {
     status: ''
   });
 
-  const principals = [
-    'Pertamina International Shipping',
-    'Alpha Adriatic',
-    'SeaQuest',
-    'SeaChef',
-    'FredOlsen',
-    'NYK Shipmanagement',
-    'Norwegian Cruise Line'
-  ];
-
   const departments = ['Deck', 'Engine', 'Hotel'];
   const genderOptions = ['Male', 'Female', 'Any'];
   const urgentOptions = ['Yes', 'No'];
   const statusOptions = ['Active', 'Inactive', 'Draft'];
 
-  // Mock job data
-  const [jobs, setJobs] = useState<Job[]>([
-    {
-      id: '1',
-      title: 'Mermaid Man and Barnacle Boy',
-      slug: 'mermaid-man-barnacle-boy',
-      content: 'Looking for experienced deck officers for cruise operations...',
-      department: 'Deck',
-      principal: 'Norwegian Cruise Line',
-      expirationDate: '2024-12-31',
-      gender: 'Male',
-      isUrgent: true,
-      status: 'Active',
-      createdDate: '2024-01-15'
-    },
-    {
-      id: '2',
-      title: 'Chief Engineer Officer',
-      slug: 'chief-engineer-officer',
-      content: 'Seeking qualified chief engineer for cargo vessel operations...',
-      department: 'Engine',
-      principal: 'NYK Shipmanagement',
-      expirationDate: '2024-11-30',
-      gender: 'Any',
-      isUrgent: false,
-      status: 'Active',
-      createdDate: '2024-01-14'
-    },
-    {
-      id: '3',
-      title: 'Hotel Manager',
-      slug: 'hotel-manager',
-      content: 'Hotel manager position for luxury cruise ship...',
-      department: 'Hotel',
-      principal: 'FredOlsen',
-      expirationDate: '2024-10-31',
-      gender: 'Any',
-      isUrgent: true,
-      status: 'Active',
-      createdDate: '2024-01-13'
+  const [jobs, setJobs] = useState<Job[]>([]);
+
+  // Helpers to map between DB and UI models
+  const dbToUi = (j: DbJob): Job => ({
+    id: j.id as string,
+    title: j.title,
+    slug: '',
+    content: j.description || '',
+    department: j.department === 'deck' ? 'Deck' : j.department === 'engine' ? 'Engine' : 'Hotel',
+    principal: j.company,
+    expirationDate: j.expiration_date,
+    gender: j.gender === 'male' ? 'Male' : j.gender === 'female' ? 'Female' : 'Any',
+    isUrgent: !!j.urgent,
+    status: 'Active',
+    createdDate: j.date_posted,
+  });
+
+  const uiToDb = (f: JobFormData): Omit<DbJob, 'id' | 'created_at' | 'updated_at'> => ({
+    title: f.title,
+    department: f.department.toLowerCase() as DbJob['department'],
+    company: f.principal,
+    location: 'N/A',
+    urgent: f.isUrgent === 'Yes',
+    date_posted: new Date().toISOString().split('T')[0],
+    expiration_date: f.expirationDate,
+    experience: 'N/A',
+    gender: f.gender.toLowerCase() as DbJob['gender'],
+    requirements: [],
+    salary: undefined,
+    description: f.content,
+  });
+
+  const loadJobs = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await JobService.getAllJobs();
+      setJobs((data || []).map(dbToUi));
+    } catch (e: any) {
+      setError('Failed to load jobs');
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
+
+  useEffect(() => {
+    loadJobs();
+  }, []);
 
   const filteredJobs = jobs.filter(job => {
     const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -126,15 +128,7 @@ const JobManagement: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newJob: Job = {
-      id: Date.now().toString(),
-      ...formData,
-      isUrgent: formData.isUrgent === 'Yes',
-      createdDate: new Date().toISOString().split('T')[0]
-    };
-    setJobs([...jobs, newJob]);
+  const resetForm = () => {
     setFormData({
       title: '',
       slug: '',
@@ -146,11 +140,63 @@ const JobManagement: React.FC = () => {
       isUrgent: '',
       status: ''
     });
-    setShowCreateForm(false);
+    setEditingId(null);
   };
 
-  const handleDelete = (id: string) => {
-    setJobs(jobs.filter(job => job.id !== id));
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      if (editingId) {
+        // Update
+        const updates = uiToDb(formData);
+        const updated = await JobService.updateJob(editingId, updates as Partial<DbJob>);
+        if (!updated) throw new Error('Failed to update job');
+      } else {
+        // Create
+        const payload = uiToDb(formData);
+        const created = await JobService.createJob(payload);
+        if (!created) throw new Error('Failed to create job');
+      }
+      await loadJobs();
+      resetForm();
+      setShowCreateForm(false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to submit');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const ok = await JobService.deleteJob(id);
+      if (!ok) throw new Error('Failed to delete');
+      await loadJobs();
+    } catch (e: any) {
+      setError(e.message || 'Failed to delete');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startEdit = (job: Job) => {
+    setEditingId(job.id);
+    setShowCreateForm(true);
+    setFormData({
+      title: job.title,
+      slug: job.slug || '',
+      content: job.content || '',
+      department: job.department,
+      principal: job.principal,
+      expirationDate: job.expirationDate,
+      gender: job.gender,
+      isUrgent: job.isUrgent ? 'Yes' : 'No',
+      status: job.status || ''
+    });
   };
 
   return (
@@ -163,14 +209,18 @@ const JobManagement: React.FC = () => {
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
-          Create Job
+          {editingId ? 'Edit Job' : 'Create Job'}
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 text-red-700 border border-red-200 px-4 py-2 rounded">{error}</div>
+      )}
 
       {/* Create Job Form */}
       {showCreateForm && (
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Create Job</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">{editingId ? 'Edit Job' : 'Create Job'}</h3>
           
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -247,7 +297,7 @@ const JobManagement: React.FC = () => {
                   required
                 >
                   <option value="">-- Please Select --</option>
-                  {principals.map(principal => (
+                  {['Pertamina International Shipping', 'Alpha Adriatic', 'SeaQuest', 'SeaChef', 'FredOlsen', 'NYK Shipmanagement', 'Norwegian Cruise Line'].map(principal => (
                     <option key={principal} value={principal}>{principal}</option>
                   ))}
                 </select>
@@ -329,17 +379,27 @@ const JobManagement: React.FC = () => {
             <div className="flex gap-4">
               <button
                 type="submit"
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                disabled={loading}
               >
-                Create Job
+                {editingId ? 'Save Changes' : 'Create Job'}
               </button>
               <button
                 type="button"
-                onClick={() => setShowCreateForm(false)}
+                onClick={() => { setShowCreateForm(false); resetForm(); }}
                 className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors"
               >
                 Cancel
               </button>
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={() => resetForm()}
+                  className="bg-yellow-100 text-yellow-800 px-6 py-2 rounded-lg hover:bg-yellow-200 transition-colors"
+                >
+                  Reset
+                </button>
+              )}
             </div>
           </form>
         </div>
@@ -404,11 +464,21 @@ const JobManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredJobs.map((job) => (
+              {loading && (
+                <tr>
+                  <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500">Loading...</td>
+                </tr>
+              )}
+              {!loading && filteredJobs.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500">No jobs found</td>
+                </tr>
+              )}
+              {!loading && filteredJobs.map((job) => (
                 <tr key={job.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{job.title}</div>
-                    <div className="text-sm text-gray-500">{job.slug}</div>
+                    {job.slug && <div className="text-sm text-gray-500">{job.slug}</div>}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -444,7 +514,7 @@ const JobManagement: React.FC = () => {
                       <button className="text-blue-600 hover:text-blue-900" title="View">
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button className="text-green-600 hover:text-green-900" title="Edit">
+                      <button onClick={() => startEdit(job)} className="text-green-600 hover:text-green-900" title="Edit">
                         <Edit className="w-4 h-4" />
                       </button>
                       <button 

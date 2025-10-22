@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Ship, Users, Shield, Award, Facebook, Instagram, Linkedin } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import AuthModal from './auth/AuthModal';
+import { useAuth } from '../contexts/AuthContext';
 
 const LandingPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   const heroSlides = [
     {
@@ -96,8 +102,17 @@ const LandingPage: React.FC = () => {
               </div>
             </div>
 
-            <button className="bg-blue-100 text-blue-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-200 transition-colors">
-              Login
+            <button 
+              onClick={() => {
+                if (isAuthenticated) {
+                  navigate('/dashboard');
+                } else {
+                  setShowAuthModal(true);
+                }
+              }}
+              className="bg-blue-100 text-blue-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-200 transition-colors"
+            >
+              {isAuthenticated ? 'Go to Dashboard' : 'Login'}
             </button>
           </div>
         </div>
@@ -431,6 +446,9 @@ const LandingPage: React.FC = () => {
           </div>
         </div>
       </footer>
+      {showAuthModal && (
+        <AuthModal onClose={() => setShowAuthModal(false)} />
+      )}
     </div>
   );
 };

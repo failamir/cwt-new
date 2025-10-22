@@ -96,14 +96,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
             </div>
           )}
           
-          {/* Admin Login Info */}
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
-            <p className="text-blue-800 text-sm font-medium mb-2">Demo Login Credentials:</p>
-            <div className="text-blue-700 text-xs space-y-1">
-              <p><strong>Admin:</strong> admin@ciptawiratirta.com (any password)</p>
-              <p><strong>User:</strong> any other email (any password)</p>
-            </div>
-          </div>
+          {/* Removed demo credentials box; using Supabase Auth now */}
 
           {isLogin ? (
             <form onSubmit={handleLoginSubmit} className="space-y-4">

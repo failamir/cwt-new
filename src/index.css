@@ -2,7 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
-/* PrimeReact Theme */
-@import 'primereact/resources/themes/lara-light-indigo/theme.css';
-@import 'primereact/resources/primereact.min.css';
-@import 'primeicons/primeicons.css';
+/* Custom animations */
+@keyframes scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-scroll {
+  animation: scroll 30s linear infinite;
+}

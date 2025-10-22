@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { api } from '../lib/api';
 
 interface User {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
+  firstName?: string;
+  lastName?: string;
   role: 'user' | 'admin';
   isVerified: boolean;
 }
@@ -41,88 +42,92 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    // Check for stored user data on app load
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      const userData = JSON.parse(storedUser);
-      setUser(userData);
-      setIsAuthenticated(true);
-    }
+    // On mount, if token exists, fetch current user
+    (async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+        const me = await api.get<any>('/me');
+        if (me) {
+          const mapped: User = {
+            id: me.id,
+            email: me.email,
+            role: (me.role as 'admin' | 'user') || 'user',
+            isVerified: true,
+          };
+          setUser(mapped);
+          setIsAuthenticated(true);
+        }
+      } catch (_e) {
+        // token invalid
+        localStorage.removeItem('auth_token');
+      }
+    })();
   }, []);
+
+  const adminAllowlist = ['admin@cwt.com', 'admin@ciptawiratirta.com'];
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock user data - in real app, this would come from API
-      const userData: User = {
-        id: '1',
-        email,
-        firstName: email === 'admin@ciptawiratirta.com' ? 'System Super' : 'John',
-        lastName: email === 'admin@ciptawiratirta.com' ? 'Admin' : 'Doe',
-        role: email === 'admin@ciptawiratirta.com' ? 'admin' : 'user',
-        isVerified: true
+      const res = await api.post<{ user: any; token: string }>(`/login`, { email, password });
+      if (!res?.token) return false;
+      localStorage.setItem('auth_token', res.token);
+      const me = res.user;
+      const mapped: User = {
+        id: me.id,
+        email: me.email,
+        role: (me.role as 'admin' | 'user') || (adminAllowlist.includes(email.toLowerCase()) ? 'admin' : 'user'),
+        isVerified: true,
       };
-      
-      setUser(userData);
+      setUser(mapped);
       setIsAuthenticated(true);
-      localStorage.setItem('user', JSON.stringify(userData));
-      
       return true;
-    } catch (error) {
+    } catch (e) {
       return false;
     }
   };
 
   const register = async (userData: RegisterData): Promise<boolean> => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock registration - in real app, this would send verification email
-      const newUser: User = {
-        id: Date.now().toString(),
+      const full_name = [userData.firstName, userData.lastName].filter(Boolean).join(' ').trim();
+      const res = await api.post<{ user: any; token: string }>(`/register`, {
         email: userData.email,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        role: 'user',
-        isVerified: false
+        password: userData.password,
+        full_name,
+      });
+      if (!res?.token) return false;
+      localStorage.setItem('auth_token', res.token);
+      const me = res.user;
+      const mapped: User = {
+        id: me.id,
+        email: me.email,
+        role: (me.role as 'admin' | 'user') || 'user',
+        isVerified: true,
       };
-      
-      // For demo purposes, auto-verify
-      newUser.isVerified = true;
-      setUser(newUser);
+      setUser(mapped);
       setIsAuthenticated(true);
-      localStorage.setItem('user', JSON.stringify(newUser));
-      
       return true;
-    } catch (error) {
+    } catch (e) {
       return false;
     }
   };
 
   const logout = () => {
-    setUser(null);
-    setIsAuthenticated(false);
-    localStorage.removeItem('user');
+    (async () => {
+      try {
+        await api.post<unknown>('/logout', {});
+      } catch (_e) {
+        // ignore
+      }
+      localStorage.removeItem('auth_token');
+      setUser(null);
+      setIsAuthenticated(false);
+    })();
   };
 
   const verifyEmail = async (token: string): Promise<boolean> => {
-    try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      if (user) {
-        const updatedUser = { ...user, isVerified: true };
-        setUser(updatedUser);
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-      }
-      
-      return true;
-    } catch (error) {
-      return false;
-    }
+    // Supabase handles email verification via its built-in flows. Placeholder to keep API shape.
+    return true;
   };
 
   const value = {
